@@ -7,6 +7,9 @@ import numpy as np
 import copy
 import random
 
+RECOGNIZE_ENABLE = False
+RECORD_ENABLE = True
+
 
 # create instance of serial
 ports = serial.tools.list_ports.comports()
@@ -20,6 +23,17 @@ serialInst.port = "COM3"
 # open the port and see the incoming data
 serialInst.open()
 
+global scaleX 
+scaleX = 1 
+global scaleY
+scaleY = 1
+def on_changeX(value):
+    global scaleX
+    scaleX = value/100
+def on_changeY(value):
+    global scaleY
+    scaleY = value/100
+   
 
 
 print(" ")
@@ -38,12 +52,13 @@ mergeHeightSize = 122
 
 countFrame = 0
 
+
 # contenitori dei pixel (byte) letti tramite uart
 himax_frame  = np.zeros((122,164,3), np.uint8)
 lepton_frame = np.zeros((60,80,3), np.uint8)
 
 # merge operations
-alpha = 0.6
+alpha = 0.8
 
 w_off = 42
 h_off = 31
@@ -51,8 +66,7 @@ w_end = w_off + lepton_frame.shape[1]
 h_end = h_off + lepton_frame.shape[0] 
 
 
-RECOGNIZE_ENABLE = False
-# *********************************************************
+# *********************** YOLO INIT ***********************
 if(RECOGNIZE_ENABLE==True):
     # Load Yolo
     net = cv2.dnn.readNet("yolov3_training_last.weights", "yolov3_testing.cfg")
@@ -65,8 +79,9 @@ if(RECOGNIZE_ENABLE==True):
     colors = np.random.uniform(0, 255, size=(len(classes), 3))
 
 # *********************************************************
-
-
+cv2.namedWindow('MERGED', cv2.WINDOW_AUTOSIZE)
+cv2.createTrackbar('scale X', 'MERGED', 100,150,on_changeX)
+cv2.createTrackbar('scale Y', 'MERGED', 100,150,on_changeY)
 
 # big infinite while loop
 while True:
@@ -103,24 +118,37 @@ while True:
     
     # *** MERGE the image in a single matrix
     merge_frame  = copy.deepcopy(himax_frame)
-    merge_frame[h_off:h_end, w_off:w_end,:] = cv2.addWeighted(lepton_frame, alpha, himax_frame[h_off:h_end, w_off:w_end,:], 1-alpha, 0.0)
+    
+    
+    lepton_stretched = cv2.resize(lepton_frame, (0,0), fx=scaleX, fy=scaleY)
+    print(scaleX)
+    w_off = int(164/2 - 80/2*scaleX)
+    h_off = int(122/2 - 60/2*scaleY)
+
+    w_end = w_off + lepton_stretched.shape[1]
+    h_end = h_off + lepton_stretched.shape[0] 
+    
+    merge_frame[h_off:h_end, w_off:w_end,:] = cv2.addWeighted(lepton_stretched, alpha, himax_frame[h_off:h_end, w_off:w_end,:], 1-alpha, 0.0)
 
 
     
 
     # SAVE THE IMAGE
-    if(countFrame < 10):
-        nameLep = "00"+str(countFrame)+"frame.bmp"
-    elif(countFrame<100):
-        nameLep = "0"+str(countFrame)+"frame.bmp"
-    else:
-        nameLep = str(countFrame)+"frame.bmp"
+    if (RECORD_ENABLE==True):
+        if(countFrame < 10):
+            nameLep = "00"+str(countFrame)+"frame.bmp"
+        elif(countFrame<100):
+            nameLep = "0"+str(countFrame)+"frame.bmp"
+        else:
+            nameLep = str(countFrame)+"frame.bmp"
 
-    
-    cv2.imwrite("Capture/Lepton/"+nameLep, lepton_frame)
-    cv2.imwrite("Capture/Himax/"+nameLep, himax_frame)
-    cv2.imwrite("Capture/Merge/"+nameLep, merge_frame)
-    countFrame = countFrame+1 
+        cv2.imwrite("Capture/Lepton/"+nameLep, lepton_frame)
+        cv2.imwrite("Capture/Himax/"+nameLep, himax_frame)
+        cv2.imwrite("Capture/Merge/"+nameLep, merge_frame)
+        countFrame = countFrame+1 
+        print(countFrame)
+
+
 
 
     # ************************************** RECOGNIZE HUMAN ********************************************
@@ -179,7 +207,7 @@ while True:
     # ****************************************************************************************
 
 
-    
+    """
     # *** DISPLAY IMAGES
     
     himax_disp = cv2.resize(himax_frame, (0,0),fx=3, fy=3)
@@ -188,18 +216,18 @@ while True:
 
     
 
-    """
+    
     # display LETPON image
     lepton_disp = cv2.resize(lepton_frame, (0,0),fx=5, fy=5)
     cv2.imshow('LEPTON',lepton_disp)
     cv2.waitKey(1) 
-    
+    """
 
     # display MERGE image
     merge_disp = cv2.resize(merge_frame, (0,0),fx=5, fy=5)
     cv2.imshow('MERGED', merge_disp)
     cv2.waitKey(1) 
-    """
+    
 
 
 
